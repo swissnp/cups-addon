@@ -21,6 +21,11 @@ cat > /share/cups/config/cupsd.conf << 'EOL'
 # Listen on all interfaces
 Listen 0.0.0.0:631
 
+# SHARE PRINTERS AND ENABLE NETWORK DISCOVERY
+Browsing Yes
+BrowseLocalProtocols dnssd
+DefaultShared Yes
+
 # Allow access from local network
 <Location />
   Order allow,deny
