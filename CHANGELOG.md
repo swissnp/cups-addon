@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.4.0] — 2026-06-05
+
+- Add optional startup-managed local proxy printer queue for re-sharing an upstream IPP/CUPS printer without hitting CUPS' remote queue sharing restriction.
+
 ## [1.2.1] — 2026-05-17
 
 - Fix: remove hardcoded aarch64 default from BUILD_FROM ARG

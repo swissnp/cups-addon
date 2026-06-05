@@ -1,6 +1,6 @@
 # Home Assistant CUPS Print Server App
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/arest/cups-addon)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/arest/cups-addon)
 [![Supports aarch64 Architecture](https://img.shields.io/badge/aarch64-yes-green.svg)](https://github.com/arest/cups-addon)
 [![Supports amd64 Architecture](https://img.shields.io/badge/amd64-yes-green.svg)](https://github.com/arest/cups-addon)
 
@@ -53,10 +53,16 @@ The app provides the following configuration options:
 ```yaml
 admin_username: printadmin
 admin_password: your_secure_password
+printer_driver_deb: ""
+proxy_printer_name: proxy_printer
+proxy_printer_uri: ""
 ```
 
-- **admin_username**: Username for the CUPS admin interface (default: printadmin)
+- **admin_username**: Username for the CUPS admin interface (default: admin)
 - **admin_password**: Password for the CUPS admin interface
+- **printer_driver_deb**: Optional `.deb` printer driver stored under `/share`
+- **proxy_printer_name**: Name to use when creating an optional local proxy queue (default: `proxy_printer`)
+- **proxy_printer_uri**: Optional upstream IPP printer URI to recreate as a local, shareable queue, for example `ipp://192.168.1.52:631/printers/DCPT230`
 
 After configuring:
 
@@ -79,6 +85,24 @@ Visit `http://<your-ha-ip>:631` in your browser.
 ### Print from Devices
 
 Configure your computers or devices to use the printer at `<your-ha-ip>:631`.
+
+### Re-share a Remote IPP/CUPS Printer
+
+If CUPS shows `Cannot change printer-is-shared for remote queues`, the printer was added as a remote/discovered queue. The web UI cannot make that queue shared. Configure the add-on to recreate it as a permanent local proxy queue instead:
+
+```yaml
+proxy_printer_name: proxy_printer
+proxy_printer_uri: ipp://192.168.1.52:631/printers/DCPT230
+```
+
+On startup, the add-on removes any existing queue with that name, creates a local IPP Everywhere queue that forwards jobs to the upstream URI, enables sharing for the local queue, accepts jobs, and sets it as the default printer.
+
+Clients can then print through this add-on at:
+
+```text
+ipp://<home-assistant-ip>:631/printers/proxy_printer
+```
+
 
 ## Supported Printer Types
 
