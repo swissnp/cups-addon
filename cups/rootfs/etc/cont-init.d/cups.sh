@@ -132,6 +132,53 @@ share_existing_printers() {
     fi
 }
 
+
+wait_for_cups() {
+    for _ in $(seq 1 20); do
+        if lpstat -r >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "Error: CUPS did not start in time."
+    return 1
+}
+
+create_proxy_printer_queue() {
+    local name="$1"
+    local uri="$2"
+
+    if [ -z "$name" ] || [ -z "$uri" ]; then
+        return 0
+    fi
+
+    echo "Recreating ${name} as a local CUPS proxy queue for ${uri}..."
+
+    # Remove an existing queue with this name first. This intentionally replaces
+    # remote/discovered CUPS queues, because those cannot have their sharing
+    # state changed by CUPS and cause: "Cannot change printer-is-shared for
+    # remote queues."
+    lpadmin -x "$name" >/dev/null 2>&1 || true
+    rm -f "/share/cups/config/ppd/${name}.ppd" 2>/dev/null || true
+
+    # Create a permanent local queue that forwards jobs to the upstream IPP
+    # printer. The local queue can then be shared from this add-on.
+    lpadmin \
+        -p "$name" \
+        -E \
+        -v "$uri" \
+        -m everywhere \
+        -D "$name" \
+        -o printer-is-shared=true
+
+    lpadmin -d "$name" || true
+    cupsaccept "$name" || true
+    cupsenable "$name" || true
+
+    echo "${name} created and shared."
+}
+
 start_discovery_services() {
     # CUPS uses Avahi/D-Bus to publish shared queues for Bonjour/AirPrint.
     # Start them opportunistically; printing by direct IPP URL still works if a
@@ -239,5 +286,28 @@ start_discovery_services
 echo "Available printer drivers:"
 lpinfo -m 2>/dev/null | head -20 || echo "CUPS not yet running; drivers will be listed after start."
 
-# Start CUPS service
-/usr/sbin/cupsd -f
+# Optional local proxy queue. This is useful when an auto-discovered remote
+# CUPS queue needs to be re-published by this add-on: CUPS will not let remote
+# queues change printer-is-shared, so the queue must be recreated locally.
+PROXY_PRINTER_NAME=$(jq -r '.proxy_printer_name // empty' /data/options.json 2>/dev/null || true)
+PROXY_PRINTER_URI=$(jq -r '.proxy_printer_uri // empty' /data/options.json 2>/dev/null || true)
+
+# Start CUPS in the background briefly so startup can configure any requested
+# proxy queue through CUPS itself, then wait on it to keep the container alive.
+echo "Starting CUPS..."
+/usr/sbin/cupsd -f &
+CUPSD_PID=$!
+
+trap 'kill "$CUPSD_PID" 2>/dev/null || true; wait "$CUPSD_PID" 2>/dev/null || true' TERM INT
+
+if [ -n "$PROXY_PRINTER_URI" ]; then
+    if [ -z "$PROXY_PRINTER_NAME" ]; then
+        PROXY_PRINTER_NAME="proxy_printer"
+    fi
+
+    wait_for_cups
+    create_proxy_printer_queue "$PROXY_PRINTER_NAME" "$PROXY_PRINTER_URI"
+fi
+
+echo "CUPS is running."
+wait "$CUPSD_PID"
